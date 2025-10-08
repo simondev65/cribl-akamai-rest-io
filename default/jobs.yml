@@ -1,0 +1,332 @@
+in_akamai_siem_integration:
+  type: collection
+  ttl: 4h
+  ignoreGroupJobsLimit: false
+  removeFields: []
+  resumeOnBoot: false
+  schedule:
+    cronSchedule: "*/2 * * * *"
+    maxConcurrentRuns: 1
+    skippable: true
+    run:
+      rescheduleDroppedTasks: true
+      maxTaskReschedule: 1
+      logLevel: info
+      jobTimeout: 60m
+      mode: run
+      timeRangeType: relative
+      timeWarning: {}
+      expression: "true"
+      minTaskSize: 1MB
+      maxTaskSize: 10MB
+      stateTracking:
+        stateUpdateExpression: "offset ? {[__collectible.id]: {offset: offset}} : ''"
+        stateMergeExpression: "newState !== '' ? Object.assign(prevState, newState) :
+          (prevState || {})"
+        enabled: true
+      timestampTimezone: UTC
+    resumeMissed: false
+    enabled: false
+  streamtags: []
+  workerAffinity: false
+  collector:
+    conf:
+      discovery:
+        discoverType: list
+        itemList:
+          - "12345"
+      collectMethod: get
+      pagination:
+        type: none
+      authentication: hmac
+      timeout: 0
+      useRoundRobinDns: false
+      disableTimeFilter: true
+      decodeUrl: false
+      rejectUnauthorized: true
+      captureHeaders: false
+      safeHeaders: []
+      retryRules:
+        type: backoff
+        interval: 1000
+        limit: 5
+        multiplier: 2
+        maxIntervalMs: 20000
+        codes:
+          - 429
+          - 503
+        enableHeader: true
+        retryConnectTimeout: false
+        retryConnectReset: false
+        retryHeaderName: retry-after
+      __scheduling:
+        stateTracking: {}
+      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/${id}`"
+      collectRequestParams:
+        - value: "`${state[`${id}`].offset == null ? `${Math.round(Date.now() / 1000) -
+            5}` : undefined}`"
+          name: from
+        - name: limit
+          value: "'150000'"
+        - name: offset
+          value: >
+            `${state[`${id}`].offset == null ? undefined :
+            state[`${id}`].offset}`
+      hmacFunctionId: hmac_akamai_edgegrid
+    destructive: false
+    encoding: utf8
+    type: rest
+  input:
+    type: collection
+    staleChannelFlushMs: 10000
+    sendToRoutes: true
+    preprocess:
+      disabled: true
+    throttleRatePerSec: "0"
+    breakerRulesets:
+      - Akamai SIEM Integration Ruleset
+    pipeline: cribl_akamai_siem_parse_decode
+    output: devnull
+    metadata:
+      - name: __packsource
+        value: "'cribl-akamai-rest-io.akamai-api'"
+  savedState: {}
+  notifications: []
+  description: Collect Akamai SIEM events using offsets - guarantees not
+    lost/duplicate data. See README for details.
+in_akamai_siem_integration_offset_advanced:
+  type: collection
+  ttl: 4h
+  ignoreGroupJobsLimit: false
+  removeFields: []
+  resumeOnBoot: false
+  schedule:
+    cronSchedule: "*/5 * * * * *"
+    maxConcurrentRuns: 1
+    skippable: true
+    run:
+      rescheduleDroppedTasks: true
+      maxTaskReschedule: 1
+      logLevel: error
+      jobTimeout: 1m
+      mode: run
+      timeRangeType: relative
+      timeWarning: {}
+      expression: "true"
+      minTaskSize: 1MB
+      maxTaskSize: 10MB
+      stateTracking:
+        stateUpdateExpression: >-
+          {
+            [__collectible.id]: {
+              latestTime: _raw.httpMessage.start ?(((state[__collectible.id].latestTime || 0) > _time)
+                ? state[__collectible.id].latestTime 
+                : Math.round(_raw.httpMessage.start))
+                :state[__collectible.id].latestTime ,
+                offset: offset!==false?offset:'',
+                lag_status: ((Date.now() / 1000)-state[__collectible.id].latestTime) >300?'above300s':(((Date.now() / 1000)-state[__collectible.id].latestTime)>180?'above180s':'ok'),
+                earliestTime: (state[__collectible.id].earliestTime || (Date.now()/1000)) < _time 
+                ? state[__collectible.id].earliestTime 
+                : Number.parseInt(`${_time}`),
+                eventcount: __timestampExtracted !== false?(state[__collectible.id].eventcount || 0)+1:(state[__collectible.id].eventcount || 0),
+            }
+          } 
+        stateMergeExpression: "newState !== '' ? Object.assign(prevState, newState) :
+          (prevState || {})"
+        enabled: true
+      discoverToRoutes: false
+      timestampTimezone: UTC
+    resumeMissed: false
+    enabled: false
+  streamtags: []
+  workerAffinity: false
+  collector:
+    conf:
+      discovery:
+        discoverType: list
+        itemList:
+          - "12345"
+      collectMethod: get
+      pagination:
+        type: none
+      authentication: hmac
+      timeout: 0
+      useRoundRobinDns: false
+      disableTimeFilter: true
+      decodeUrl: false
+      rejectUnauthorized: true
+      captureHeaders: false
+      safeHeaders: []
+      retryRules:
+        type: backoff
+        interval: 1000
+        limit: 5
+        multiplier: 2
+        maxIntervalMs: 20000
+        codes:
+          - 429
+          - 503
+        enableHeader: true
+        retryConnectTimeout: false
+        retryConnectReset: false
+        retryHeaderName: retry-after
+      __scheduling:
+        stateTracking: {}
+      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/${id}`"
+      collectRequestParams:
+        - value: >
+            `${state[`${id}`].lag_status=='ok'&&
+            state[`${id}`].offset?undefined:(state[`${id}`].lag_status=='above300s'?`${Math.round(Date.now()
+            / 1000) - 180}`:(state[`${id}`].lag_status=='above180s' ?
+            `${Math.round(Date.now() / 1000) - 30}` : `${Math.round(Date.now() /
+            1000) - 43000}`))}`
+          name: from
+        - name: limit
+          value: "'50000'"
+        - name: offset
+          value: "`${state[`${id}`].lag_status=='ok' && state[`${id}`].offset
+            ?  state[`${id}`].offset: undefined}`"
+      hmacFunctionId: hmac_akamai_edgegrid
+      collectRequestHeaders: []
+    destructive: false
+    encoding: utf8
+    type: rest
+  input:
+    type: collection
+    staleChannelFlushMs: 10000
+    sendToRoutes: true
+    preprocess:
+      disabled: true
+    throttleRatePerSec: "0"
+    breakerRulesets:
+      - Akamai SIEM Integration Ruleset
+    pipeline: cribl_akamai_siem_parse_decode
+    output: devnull
+    metadata:
+      - name: __packsource
+        value: "'cribl-akamai-rest-io.akamai-api'"
+  savedState: {}
+  notifications: []
+  description: "Lag Correction Collector - detects and compensates for lag due to
+    high-volume of events. See Pack README for instructions on when to use. "
+in_akamai_siem_integration_multithreaded:
+  type: collection
+  ttl: 4h
+  ignoreGroupJobsLimit: false
+  removeFields: []
+  resumeOnBoot: false
+  schedule:
+    cronSchedule: " * * * * *"
+    maxConcurrentRuns: 1
+    skippable: true
+    run:
+      rescheduleDroppedTasks: false
+      maxTaskReschedule: 1
+      logLevel: info
+      jobTimeout: 2m
+      mode: run
+      timeRangeType: relative
+      timeWarning: {}
+      expression: "true"
+      minTaskSize: 1MB
+      maxTaskSize: 10MB
+      stateTracking:
+        stateUpdateExpression: >-
+          {
+                latestTime: _raw.httpMessage.start ?(((state.latestTime || 0) > _time)
+                ? state.latestTime 
+                : Math.round(_raw.httpMessage.start))
+                :state.latestTime,
+                lag_status: ((Date.now() / 1000)-state.latestTime) >60?'lag':'ok',
+                total: total ? total : '',
+                id:__collectible.id?__collectible.id:''
+          }
+        stateMergeExpression: "(prevState.latestTime || 0) > newState.latestTime ?
+          prevState : newState"
+        enabled: true
+      discoverToRoutes: false
+      timestampTimezone: UTC
+    resumeMissed: false
+    enabled: false
+  streamtags: []
+  workerAffinity: false
+  collector:
+    conf:
+      discovery:
+        discoverType: list
+        itemList:
+          - "0"
+          - "15"
+          - "30"
+          - "45"
+      collectMethod: get
+      pagination:
+        type: none
+      authentication: hmac
+      timeout: 0
+      useRoundRobinDns: false
+      disableTimeFilter: true
+      decodeUrl: false
+      rejectUnauthorized: true
+      captureHeaders: false
+      safeHeaders: []
+      retryRules:
+        type: backoff
+        interval: 1000
+        limit: 5
+        multiplier: 2
+        maxIntervalMs: 20000
+        codes:
+          - 429
+          - 503
+        enableHeader: true
+        retryConnectTimeout: false
+        retryConnectReset: false
+        retryHeaderName: retry-after
+      __scheduling:
+        stateTracking: {}
+      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/YOURE_CONF\
+        IG_ID_HERE`"
+      collectRequestParams:
+        - value: >-
+            `${state.lag_status=='ok'&& Number(state.latestTime)?
+            `${Number(state.latestTime)+1 + Math.round(Number(id))
+
+            }`:(state.lag_status=='lag'?`${Math.round(Date.now() / 1000) - 65+Math.round(Number(id))}` : `${Math.round(Date.now() / 1000) - 65+Math.round(Number(id))}`)}`
+          name: from
+        - name: limit
+          value: "'120000'"
+        - name: to
+          value: >
+            `${state.lag_status=='ok'&& Number(state.latestTime) && id=='45'?
+            `${Math.round(Date.now() / 1000) -
+            65+15+Math.round(Number(id))}`:(state.lag_status=='ok'&&
+            Number(state.latestTime)?
+            `${state.latestTime+Math.round(Number(id))+15}`:(state.lag_status=='lag'?`${Math.round(Date.now()
+            / 1000) - 65+15+Math.round(Number(id))}` :
+             `${Math.round(Date.now() / 1000) - 65+15+Math.round(Number(id))}`))}`
+      hmacFunctionId: hmac_akamai_edgegrid
+      collectRequestHeaders: []
+    destructive: false
+    encoding: utf8
+    type: rest
+  input:
+    type: collection
+    staleChannelFlushMs: 10000
+    sendToRoutes: true
+    preprocess:
+      disabled: true
+    throttleRatePerSec: "0"
+    breakerRulesets:
+      - Akamai SIEM Integration Ruleset
+    pipeline: cribl_akamai_siem_parse_decode
+    output: devnull
+    metadata:
+      - name: id
+        value: "`${__collectible.id}`"
+      - name: __packsource
+        value: "'cribl-akamai-rest-io.akamai-api'"
+  savedState: {}
+  notifications: []
+  description: "High-Volume Collector - runs 4 threads every minute. See Pack
+    README for instructions on when to use. "

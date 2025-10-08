@@ -1,0 +1,223 @@
+functions:
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Map Akamai Security Events data to the Detection Finding (2004) Class
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Unroll each rule array member since they each represent a separate
+        Finding with different values for many Detection Finding fields
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - name: category_uid
+          value: "2"
+        - disabled: false
+          name: category_name
+          value: "'Findings'"
+        - name: class_uid
+          value: "2004"
+        - disabled: false
+          name: class_name
+          value: "'Detection Finding'"
+        - name: is_alert
+          value: "ruleData.ruleAction=='alert' ? true : false"
+        - name: message
+          value: ruleData.ruleMessage
+        - name: severity_id
+          value: "ruleData.ruleAction=='alert' ? 4 : 2"
+        - disabled: false
+          name: severity
+          value: "ruleData.ruleAction=='alert' ? 'High' : 'Low'"
+        - name: time
+          value: _time
+        - name: timezone_offset
+          value: "0"
+        - name: type_uid
+          value: 2004 * 100 + activity_id
+        - disabled: false
+          name: type_name
+          value: "type_uid === 200400 ? 'Detection Finding: Unknown' : type_uid === 200401
+            ? 'Detection Finding: Create' : type_uid === 200402 ? 'Detection
+            Finding: Update' : type_uid === 200403 ? 'Detection Finding: Close'
+            : 'Detection Finding: Other'"
+        - disabled: false
+          name: raw_data
+          value: _raw
+    description: Set top-level OCSF Detection fields
+    groupId: c5yBAR
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - disabled: false
+          name: device
+          value: "{}"
+        - disabled: false
+          name: device.ip
+          value: attackData.clientIP
+        - disabled: false
+          name: device.location
+          value: "{}"
+        - disabled: false
+          name: device.location.isp
+          value: geo.asn
+        - disabled: false
+          name: device.location.city
+          value: geo.city
+        - disabled: false
+          name: device.location.country
+          value: geo.country
+        - disabled: false
+          name: device.location.continent
+          value: geo.continent
+        - disabled: false
+          name: device.location.region
+          value: geo.regionCode
+    groupId: c5yBAR
+    description: Set device Detection field
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - name: metadata
+          value: "{}"
+        - name: metadata.product
+          value: "{}"
+        - name: metadata.product.name
+          value: "'Akamai SIEM Integration API'"
+        - name: metadata.product.vendor_name
+          value: "'Akamai'"
+        - name: metadata.product.version
+          value: "'1.0'"
+        - disabled: false
+          name: metadata.version
+          value: "'1.4.0'"
+    description: Set metadata Detection field
+    groupId: c5yBAR
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - name: finding_info
+          value: "{}"
+        - name: finding_info.title
+          value: ruleData.ruleMessage
+        - disabled: false
+          name: finding_info.desc
+          value: ruleData.ruleTag
+        - disabled: false
+          name: finding_info.analytic
+          value: "{}"
+        - disabled: false
+          name: finding_info.analytic.category
+          value: ruleData.ruleTag
+        - disabled: false
+          name: finding_info.analytic.name
+          value: ruleData.Rule
+        - disabled: false
+          name: finding_info.analytic.type_id
+          value: "1"
+        - disabled: false
+          name: finding_info.analytic.type
+          value: "'Rule'"
+        - disabled: false
+          name: finding_info.analytic.desc
+          value: ruleData.ruleMessage
+        - disabled: false
+          name: finding_info.data_sources
+          value: ruleData.ruleData
+    description: Set finding_info Detection field
+    groupId: c5yBAR
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - disabled: false
+          name: observable
+          value: "[]"
+        - disabled: false
+          name: observable[0]
+          value: "{type_id: 1, value: httpMessage.host}"
+        - disabled: false
+          name: observable[1]
+          value: "{type_id: 2, value: attackData.clientIP}"
+        - disabled: false
+          name: observable[2]
+          value: "{type_id: 4, value: userRiskData.username}"
+        - disabled: false
+          name: observable[3]
+          value: "{type_id: 11, value: httpMessage.port}"
+        - disabled: false
+          name: observable[4]
+          value: "{type_id: 14, value: geo.country}"
+    groupId: c5yBAR
+    description: Set observables Detection field
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - disabled: false
+          name: unmapped
+          value: "{}"
+        - disabled: false
+          name: unmapped.ruleSelector
+          value: ruleData.ruleSelector
+        - disabled: false
+          name: unmapped.botData
+          value: botData
+        - disabled: false
+          name: unmapped.clientData
+          value: clientData
+        - disabled: false
+          name: unmapped.httpMessage
+          value: httpMessage
+        - disabled: false
+          name: unmapped.identity
+          value: identity
+    groupId: c5yBAR
+    description: Set unmapped field
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      keep:
+        - unmapped.*
+        - message
+        - finding_info.*
+        - time
+        - observables.*
+        - timezone_offset
+        - is_alert
+        - type_uid
+        - metadata.*
+        - activity*
+        - severity*
+        - confidence*
+        - raw_data
+        - status_*
+        - device*
+        - resources*
+        - category_*
+        - class_*
+      remove:
+        - "*"
+        - cribl_*
+    description: Drop fields non-OCSF fields
+streamtags:
+  - cpe
+groups:
+  c5yBAR:
+    name: Set OCSF Detection Finding fields
+    index: 2
+    disabled: false

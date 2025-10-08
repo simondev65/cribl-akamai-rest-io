@@ -1,0 +1,26 @@
+id: default
+groups: {}
+comments: []
+routes:
+  - id: 7waQxH
+    name: cribl_akamai_siem_events_route
+    final: true
+    disabled: false
+    pipeline: cribl_akamai_siem_security_events
+    description: Process Akamai SIEM Security Events
+    enableOutputExpression: false
+    outputExpression: null
+    filter: __packsource == 'cribl-akamai-rest-io.akamai-api'
+    clones: []
+    output: default
+  - id: default
+    name: default
+    final: true
+    disabled: false
+    pipeline: devnull
+    description: ""
+    enableOutputExpression: false
+    outputExpression: null
+    filter: "true"
+    clones: []
+    output: default

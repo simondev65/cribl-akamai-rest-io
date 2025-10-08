@@ -1,0 +1,4 @@
+akamai_siem_default_splunk_index:
+  type: any
+  lib: custom
+  value: "'akamai_siem'"

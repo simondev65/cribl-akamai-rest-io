@@ -1,0 +1,144 @@
+output: default
+streamtags: []
+groups:
+  oQucZ4:
+    name: Parse Attack Data
+    description: Handles decoding and reformatting attack data
+    index: 4
+    disabled: false
+asyncFuncTimeout: 1000
+functions:
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Pre-processing pipeline to decode the attackData JSON array
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: "Author: Cribl Packs Team"
+  - id: drop
+    filter: offset || __drop === true
+    disabled: null
+    conf: {}
+    description: Drop offset context events. This metadata is used for state
+      tracking prior to this pipeline.
+  - id: serde
+    filter: "true"
+    disabled: null
+    conf:
+      mode: extract
+      type: json
+      srcField: _raw
+  - id: code
+    filter: "true"
+    disabled: false
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1
+      useUniqueLogChannel: true
+      code: >-
+        function decodeAkamaiConfigRule(attackData) {
+
+            let decodedAttackData = {};
+            
+            for (const [key, value] of Object.entries(attackData)) {
+                if (key.startsWith('rule')) {
+                    decodedAttackData[key] = Array.from(C.Decode.uri(value).split(';'), (x) => C.Decode.base64(x))
+                }
+            }
+
+            return decodedAttackData
+        }
+
+
+        function mergeAkamaiConfigData(configData) {
+            let mergedData = [];
+
+            for (const [key, value] of Object.entries(configData)) {
+                for (let i = 0; i < value.length; i++) {
+
+                    // let formattedKey = key.replace(/^rule(\w{2,})$/, '$1').replace(/s$/, '');
+                    let formattedKey = key.replace(/s$/, '');
+                    formattedKey = (formattedKey === 'rule' ? 'Rule' : formattedKey);
+
+                    try {
+                        mergedData[i][formattedKey] = value[i]
+                    } catch (e) {
+                        mergedData[i] = {[formattedKey]: value[i]}
+                    }
+                }
+            }
+
+            return mergedData
+        }
+
+
+        __e['attackData']['data'] = mergeAkamaiConfigData(decodeAkamaiConfigRule(__e['attackData']));
+    groupId: oQucZ4
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      remove:
+        - attackData.rule*
+      add:
+        - disabled: false
+          name: httpMessage.query
+          value: C.Decode.uri(httpMessage.query)
+        - disabled: false
+          name: httpMessage.requestHeaders
+          value: C.Decode.uri(httpMessage.requestHeaders).split('\n').filter(String)
+        - disabled: false
+          name: httpMessage.responseHeaders
+          value: C.Decode.uri(httpMessage.responseHeaders).split('\n').filter(String)
+      keep: []
+    groupId: oQucZ4
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - disabled: false
+          name: attackData.rules
+          value: attackData.data
+      remove:
+        - attackData.data
+    groupId: oQucZ4
+  - id: numerify
+    filter: "true"
+    disabled: false
+    conf:
+      depth: 5
+      format: none
+      ignoreFields: []
+      filterExpr: ""
+      digits: 0
+    groupId: oQucZ4
+  - id: serialize
+    filter: "true"
+    disabled: false
+    conf:
+      type: json
+      dstField: _raw
+      fields:
+        - "!_*"
+        - "!__*"
+        - "!cribl*"
+        - "!host"
+        - "!source"
+        - "*"
+  - id: eval
+    filter: "true"
+    disabled: null
+    conf:
+      keep:
+        - _raw
+        - _time
+        - cribl*
+        - source*
+        - host
+      remove:
+        - "*"
+description: Decode encoded data in Akamai security events

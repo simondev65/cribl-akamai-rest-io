@@ -1,0 +1,15 @@
+jxLMbB:
+  sampleName: cribl_akamai_security_event
+  created: 1756857139708
+  size: 3518
+  numEvents: 1
+  ttl: 0
+  description: '"raw" event from the API without breaking/pre-processing. Included
+    for completeness'
+zr2U6K:
+  sampleName: cribl_akamai_security_event_decoded
+  created: 1756925368964
+  size: 5498
+  numEvents: 1
+  description: API event with decoded "attackData"
+  ttl: 0

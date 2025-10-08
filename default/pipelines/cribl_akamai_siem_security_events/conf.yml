@@ -1,0 +1,96 @@
+output: default
+streamtags: []
+groups:
+  bpRRTi:
+    description: Select the desired output
+    name: Outputs
+    index: 5
+    disabled: false
+asyncFuncTimeout: 1000
+functions:
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Parse and decode fields from Akamai SIEM Security Events and output to
+        either OCSF or Splunk
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: "Author: Cribl Packs Team"
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Unroll each rule array member since they each represent a separate
+        Finding with different values for many Detection Finding fields
+  - id: json_unroll
+    filter: "true"
+    disabled: null
+    conf:
+      path: attackData.rules
+      name: ruleData
+  - id: serde
+    filter: "true"
+    disabled: null
+    conf:
+      mode: extract
+      type: json
+      srcField: _raw
+  - id: comment
+    filter: "true"
+    disabled: false
+    conf:
+      comment: Enable to output OCSF (Amazon Security Lake)
+    groupId: bpRRTi
+  - id: chain
+    filter: "true"
+    disabled: false
+    conf:
+      processor: cribl_akamai_siem_security_events_ocsf
+    groupId: bpRRTi
+  - id: comment
+    filter: "true"
+    disabled: false
+    conf:
+      comment: Enable to output to Splunk
+    groupId: bpRRTi
+  - id: serialize
+    filter: "true"
+    disabled: true
+    conf:
+      type: json
+      dstField: _raw
+      fields:
+        - "!cribl_*"
+        - "!_*"
+        - "!host"
+        - "!source"
+        - "*"
+    groupId: bpRRTi
+  - id: eval
+    filter: "true"
+    disabled: true
+    conf:
+      remove:
+        - "*"
+      keep:
+        - cribl_*
+        - _*
+        - host
+        - source
+        - sourcetype
+        - index
+      add:
+        - disabled: false
+          name: index
+          value: "index ? index : C.vars.akamai_siem_default_splunk_index"
+        - disabled: false
+          name: sourcetype
+          value: "'akamaisiem'"
+        - disabled: false
+          name: source
+          value: "source ? source : 'cribl-akamai-security-events-rest'"
+    groupId: bpRRTi
+description: Process and output Akamai security events
