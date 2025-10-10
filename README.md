@@ -15,7 +15,7 @@ The Pack includes OCSF and Splunk output processing:
 * This pack is configured by default to use the Worker Group's *Default Destination*.
 * To use the *Default Destination*: No changes are required. The pack will route the data to the destination currently set as the Default on the Worker Group.
 * To use a different Destination: You must update the pack's routes to specify your desired Destination.
-* For immediate functionality without requiring Pack route filter expression modifications, every bundled Source within this pack adds a hidden field: `__packsource == 'cribl-akamai-rest-io.akamai-api'`. This field allows for seamless routing based on the Pack source.
+* For immediate functionality without requiring Pack route filter expression modifications, every bundled Source within this pack adds a hidden field: `__packsource`. This field allows for seamless routing based on the Pack source.
 
 
 After installing the Pack, you must perform the following:
@@ -37,19 +37,17 @@ After installing the Pack, you must perform the following:
 * Perform a **Run > Preview** of the  `in_akamai_siem_integration` Collector to verify that it works correctly.
 * Schedule the Collector and ensure State Tracking is enabled (the correct configuration is already included).
 
+### Configure Output Format
+Data can be configured to output in either normalized JSON (default), OCSF, or Splunk (`_raw `+ Splunk fields) format. Enable *only one* format in the `cribl_akamai_siem_security_events` pipeline.
+
 ### Configure your Destination/Update Pack Routes
 To ensure proper data routing, you must make a choice: retain the current setting to use the Default Destination defined by your Worker Group, or define a new Destination directly inside this pack and adjust the pack's route accordingly.
 
 ### Commit and Deploy
 Once everything is configured, perform a Commit & Deploy to enable data collection.
 
-
 ## Pack Configurable Items 
 The following are the in-Pack configurable items - review/update them as needed. 
-
-### Outputs
-
-Akamai SIEM Security EVents can be configured to output data in either OCSF or normalized JSON (Splunk) format. Enable *only one* format in the `cribl_akamai_siem_security_events` pipeline.
 
 ### Variables
 
