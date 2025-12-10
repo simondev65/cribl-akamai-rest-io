@@ -32,7 +32,7 @@ in_akamai_siem_integration:
   collector:
     conf:
       discovery:
-        discoverType: list
+        discoverType: none
         itemList:
           - "12345"
       collectMethod: get
@@ -45,6 +45,7 @@ in_akamai_siem_integration:
       decodeUrl: false
       rejectUnauthorized: true
       captureHeaders: false
+      stopOnEmptyResults: false
       safeHeaders: []
       retryRules:
         type: backoff
@@ -61,7 +62,8 @@ in_akamai_siem_integration:
         retryHeaderName: retry-after
       __scheduling:
         stateTracking: {}
-      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/${id}`"
+      collectUrl: "`https://${C.vars['akamai_hostname']}.akamaiapis.net/siem/v1/confi\
+        gs/${C.vars['akamai_config_id']}`"
       collectRequestParams:
         - value: "`${state[`${id}`].offset == null ? `${Math.round(Date.now() / 1000) -
             5}` : undefined}`"
@@ -143,9 +145,8 @@ in_akamai_siem_integration_offset_advanced:
   collector:
     conf:
       discovery:
-        discoverType: list
-        itemList:
-          - "12345"
+        discoverType: none
+        itemList: []
       collectMethod: get
       pagination:
         type: none
@@ -156,6 +157,7 @@ in_akamai_siem_integration_offset_advanced:
       decodeUrl: false
       rejectUnauthorized: true
       captureHeaders: false
+      stopOnEmptyResults: false
       safeHeaders: []
       retryRules:
         type: backoff
@@ -172,7 +174,8 @@ in_akamai_siem_integration_offset_advanced:
         retryHeaderName: retry-after
       __scheduling:
         stateTracking: {}
-      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/${id}`"
+      collectUrl: "`https://${C.vars['akamai_hostname']}.akamaiapis.net/siem/v1/confi\
+        gs/${C.vars['akamai_config_id']}`"
       collectRequestParams:
         - value: >
             `${state[`${id}`].lag_status=='ok'&&
@@ -269,6 +272,7 @@ in_akamai_siem_integration_multithreaded:
       decodeUrl: false
       rejectUnauthorized: true
       captureHeaders: false
+      stopOnEmptyResults: false
       safeHeaders: []
       retryRules:
         type: backoff
@@ -285,8 +289,8 @@ in_akamai_siem_integration_multithreaded:
         retryHeaderName: retry-after
       __scheduling:
         stateTracking: {}
-      collectUrl: "`https://YOUR_AKAMAI_URL.akamaiapis.net/siem/v1/configs/YOURE_CONF\
-        IG_ID_HERE`"
+      collectUrl: "`https://${C.vars['akamai_hostname']}.akamaiapis.net/siem/v1/confi\
+        gs/${C.vars['akamai_config_id']}`"
       collectRequestParams:
         - value: >-
             `${state.lag_status=='ok'&& Number(state.latestTime)?

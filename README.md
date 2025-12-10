@@ -21,20 +21,23 @@ The Pack includes OCSF and Splunk output processing:
 After installing the Pack, you must perform the following:
 
 ### Add Akamai Credentials to Cribl Stream
-*Note*: If you use an external secret store, the HMAC function *must* modified to reference those secrets using the proper names.
+*Note*: If you use an external secret store, the HMAC function *must* be modified to reference those secrets using the proper names.
 
-* Obtain an API Key, Secret, and Access Token from your Akamai Control Center
+* Obtain an Client Token, Client Secret, and Access Token from your Akamai Control Center
 * Open the worker group that will contain the Akamai collector.
 * Navigate to **Group Settings > Security > Secrets**
 * Create 2 Secrets. 
-   * The first will have type **API key and secret key**. This secret should be named `akamai_client_credentials`. Populate the client ID as the API Key and the client secret as the Secret Key.
-   * The second will have type **Text**. This secret should be named `akamai_access_token`. Populate the Value field with the Akamai Access Token.
+   * The first will have type **API key and secret key**. This secret should be named `akamai_client_credentials`. Populate the Client Token as the `API Key` and the Client Secret as the `Secret Key`.
+   * The second will have type **Text**. This secret should be named `akamai_access_token`. Populate the `Value` field with the Akamai Access Token.
 
 ### Configure the Collector
-* Update the `in_akamai_siem_integration` Collector with the following:
-   * In **Discover**, add the Akamai `configId'`s you want to Collect from.
-   * In **Collect**, replace the placeholder `YOUR_AKAMAI_URL` with your actual Akamai URL.
+* Update the following Pack variables with their correct values for your Akamai environment:
+
+  * `akamai_hostname`: The hostname of your Akamai environment
+  * `akamai_config_id`: The unique identifier for each security configuration for which you want to collect data. You can collect from more than one ID simultaneously by separating them via semicolon (`;`)
+
 * Perform a **Run > Preview** of the  `in_akamai_siem_integration` Collector to verify that it works correctly.
+
 * Schedule the Collector and ensure State Tracking is enabled (the correct configuration is already included).
 
 ### Configure Output Format
@@ -70,8 +73,8 @@ If your Akamai Id sends more than 3000 eps, you might want to use the multithrea
 
 Note that this configuration can only handle *one* Id, which you set directly in the url.
 
-* Configure (like in the section above) and use the `in_akamai_siem_integration_multithreaded` REST Collector 
-* Replace the YOURE_CONFIG_ID_HERE at the end of the URL with your Akamai Id
+* Ensure the `akamai_config_id` variable contains *only one* ID.
+* Disable the othe Collectors and schedule the `in_akamai_siem_integration_multithreaded` REST Collector 
 
 Note that this collection **will** generate duplicate data. Akamai will randomly send you data outside the date boundary, data that you already collected a minute ago. To solve this issue, perform the following:
 
@@ -94,8 +97,11 @@ Upgrading certain Cribl Packs using the same Pack ID can have unintended consequ
 
 ## Release Notes
 
+### Version 1.1.0
+- Collector configuration is now done via variables
+
 ### Version 1.0.0
-Initial release
+- Initial release
 
 ## Contributing to the Pack
 

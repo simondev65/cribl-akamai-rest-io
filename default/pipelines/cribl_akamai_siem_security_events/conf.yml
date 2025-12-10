@@ -46,7 +46,7 @@ functions:
     groupId: bpRRTi
   - id: chain
     filter: "true"
-    disabled: false
+    disabled: true
     conf:
       processor: cribl_akamai_siem_security_events_ocsf
     groupId: bpRRTi

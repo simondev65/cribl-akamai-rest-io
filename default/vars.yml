@@ -1,3 +1,14 @@
+akamai_hostname:
+  type: any
+  lib: custom
+  description: "REQUIRED: Your Akamai API hostname"
+  value: "'YOUR_AKAMAI_HOSTNAME'"
+akamai_config_id:
+  type: any
+  lib: custom
+  description: "REQUIRED: Config ID (or IDs) for collection - multiple ID's must
+    be separated by a semicolon (';')"
+  value: "'YOUR_CONFIG_ID'"
 akamai_siem_default_splunk_index:
   type: any
   lib: custom
