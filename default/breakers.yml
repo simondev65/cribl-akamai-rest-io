@@ -35,7 +35,5 @@ Akamai SIEM Integration Ruleset:
       eventBreakerRegex: /[\n\r]+(?!\s)/
       name: Akamai Security Events
       fields:
-        - name: _raw
-          value: JSON.parse(_raw) || _raw
   description: Event breaking rules to handle Akamai Multi-JSON responses
   lib: custom
