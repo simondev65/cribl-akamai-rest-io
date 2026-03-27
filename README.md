@@ -101,7 +101,6 @@ Upgrading certain Cribl Packs using the same Pack ID can have unintended consequ
 
 ### Version 1.1.1
 * Updated Route Destinations to "Send to Worker Group Routes". See above for details.
-* Updated recursive Code function to skip internal `__*` fields to prevent infinite recursion and errors on 4.17+.”
 
 ### Version 1.1.0
 - Collector configuration is now done via variables
