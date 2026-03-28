@@ -24,4 +24,5 @@ routes:
     outputExpression: null
     filter: "true"
     clones: []
-    output: default
+    targetContext: group
+    output: __group
