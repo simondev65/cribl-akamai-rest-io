@@ -12,7 +12,8 @@ routes:
     outputExpression: null
     filter: __packsource == 'cribl-akamai-rest-io.akamai-api'
     clones: []
-    output: default
+    targetContext: group
+    output: __group
   - id: default
     name: default
     final: true
@@ -23,4 +24,5 @@ routes:
     outputExpression: null
     filter: "true"
     clones: []
-    output: default
+    targetContext: group
+    output: __group
