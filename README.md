@@ -126,16 +126,10 @@ Upgrading certain Cribl Packs using the same Pack ID can have unintended consequ
 ### Version 2.1.1
 
 `cribl_akamai_siem_security_events`:
-* The single `Outputs` group is now two clearly named, mutually exclusive groups - `Output - OCSF (Amazon Security Lake)` and `Output - Splunk (akamaisiem sourcetype)`. Each group's description names the functions you have to enable, so the choice between chaining to OCSF and serializing for Splunk is made in one place. The Route is unchanged - still a single `cribl_akamai_siem_events_route`.
-* **Reverted 2.1.0's `Unroll` reordering, which was a mistake.** `JSON Unroll` is back above the `Serde` extract, where the Pack originally had it, and enabled again. [`JSON Unroll`](https://docs.cribl.io/stream/json-unroll-function) operates on the JSON string in `_raw`, not on extracted fields, so 2.1.0's move below the extract left the OCSF mapping with no `ruleData` - the exact failure that change claimed to fix. It is documented as required for OCSF and optional for Splunk.
-* The Splunk `Code` function no longer tries to collapse `attackData.rules` into the unrolled rule. `JSON Unroll` *replaces* the array rather than duplicating it, so there was never a double-ship to prevent; the function now simply renames whichever shape is present.
-* The Pack now ships with the OCSF output enabled (`JSON Unroll` plus the **Output - OCSF** group), and the **Output - Splunk** group disabled at the group level.
+* Added an optional `Code` function to the Splunk group that renames the rule fields to the Splunk TA names.it handles `JSON Unroll` *replaces* the array rather than duplicating it, so there was never a double-ship to prevent; the function now simply renames whichever shape is present.
 * The OCSF `Chain` function is now filtered on `attackData` instead of `true`. Bot-only events have no matched WAF rule, so 20 of the mapping's expressions dereferenced a `ruleData` / `attackData` / `geo` / `userRiskData` object that did not exist, and the result was a `class_uid: 2004` record with no `finding_info`, `severity_id` or `is_alert` - all required by the OCSF class. Those events now bypass the mapping and pass through as normalized JSON (see *Bot-only events and OCSF*).
+*  The Splunk `index` now falls back to `akamai_siem` if the `akamai_siem_default_splunk_index` variable is missing.
 
-Docs:
-* Rewrote *Configure Output Format* around the two Output groups, and documented the shared `Unroll` trade-off for each output.
-
-### Version 2.1.0
 
 `cribl_akamai_siem_parse_decode`:
 * Fixed the `attackData.rule*` decoding. A trailing `;` in an Akamai rule field no longer produces a spurious empty rule; rule slots carrying no values are pruned instead of surfacing as empty objects; and empty per-rule values are omitted instead of being emitted as empty strings, which `Numerify` then turned into `0` (visible as `ruleSelector: 0` in the old decoded sample).
@@ -144,10 +138,6 @@ Docs:
 * The `Code` and `Eval` functions are now scoped with `attackData` / `httpMessage` filters instead of `true`. Events with no `attackData` - bot-only events, or any event whose `_raw` failed to parse in Preview - previously errored with `Cannot set properties of undefined`. They now pass through untouched.
 * Rule field matching is case-insensitive and coerces non-string values, so a change in Akamai's casing or types no longer throws.
 
-`cribl_akamai_siem_security_events`:
-* Moved the `Unroll` function below the `Serde` extract and shipped it disabled. **This was wrong and is reverted in 2.1.1** - `JSON Unroll` operates on `_raw` and has to run above the extract, which is where the Pack originally had it.
-* Added an optional `Code` function to the Splunk group that renames the rule fields to the Splunk TA names.
-* The Splunk `index` now falls back to `akamai_siem` if the `akamai_siem_default_splunk_index` variable is missing.
 
 Samples:
 * Added `cribl_akamai_security_event_edge_cases` - collector output as the event breaker delivers it, covering a security event with a trailing `;` in `ruleSelectors`, a bot-only event, and an offset state object.
