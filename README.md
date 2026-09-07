@@ -43,19 +43,21 @@ After installing the Pack, you must perform the following:
 * Schedule the Collector and ensure State Tracking is enabled (the correct configuration is already included).
 
 ### Configure Output Format
-All Security Events travel a **single Route** (`cribl_akamai_siem_events_route` → `cribl_akamai_siem_security_events`). The output format is chosen inside that pipeline, which ends with two mutually exclusive function groups - **Output - OCSF** and **Output - Splunk**. Enable *exactly one* of them, all of its functions, and leave the other group disabled.
+All Security Events travel a **single Route** (`cribl_akamai_siem_events_route` → `cribl_akamai_siem_security_events`). The output format is chosen inside that pipeline, which ends with two mutually exclusive function groups - **Output - OCSF** and **Output - Splunk**. Enable *exactly one* of them and leave the other disabled.
 
-* **Normalized JSON** (default): nothing to enable. Both Output groups stay disabled.
-* **OCSF** (Amazon Security Lake): enable the `Chain` function in the **Output - OCSF** group, *and* the shared `Unroll` function above the group. `Chain` hands off to `cribl_akamai_siem_security_events_ocsf`, which reads the pack-native rule names - so do not also enable the Splunk group's `Code` function, which renames them. `Chain` is filtered on `attackData`, so bot-only events bypass the mapping (see below) and reach your Destination as normalized JSON alongside the OCSF findings - add a `Drop` function above the group if you would rather discard them.
-* **Splunk**: enable *all three* functions in the **Output - Splunk** group - the `Code` function that renames the rule fields to the names the [Akamai SIEM Integration App](https://splunkbase.splunk.com/app/4310) expects (`Rule`→`id`, `ruleAction`→`action`, `ruleMessage`→`message`, and so on), the `Serialize` function, and the `Eval` function that sets `index`, `source` and `sourcetype`.
+The Pack ships with **OCSF enabled**: `JSON Unroll` and the **Output - OCSF** group are on, and the **Output - Splunk** group is disabled at the group level.
 
-#### The shared `Unroll` function
-`Unroll` sits above both Output groups because either output can use it. It splits `attackData.rules[]` into one event per matched WAF rule instead of one event per request.
+* **OCSF** (Amazon Security Lake) - the shipped default. Needs `JSON Unroll` *and* the `Chain` function in the **Output - OCSF** group. `Chain` hands off to `cribl_akamai_siem_security_events_ocsf`, which reads the pack-native rule names - so do not also enable the Splunk group's `Code` function, which renames them. `Chain` is filtered on `attackData`, so bot-only events bypass the mapping (see below) and reach your Destination as normalized JSON alongside the OCSF findings - add a `Drop` function if you would rather discard them.
+* **Splunk**: disable the **Output - OCSF** group, then enable the **Output - Splunk** group and *all three* of its functions - the `Code` function that renames the rule fields to the names the [Akamai SIEM Integration App](https://splunkbase.splunk.com/app/4310) expects (`Rule`→`id`, `ruleAction`→`action`, `ruleMessage`→`message`, and so on), the `Serialize` function, and the `Eval` function that sets `index`, `source` and `sourcetype`. `JSON Unroll` is optional here - see below.
+* **Normalized JSON**: disable both Output groups, and `JSON Unroll` too unless you want one event per rule.
 
-* **OCSF: required.** Detection Finding treats each matched rule as a separate Finding, so without `Unroll` every `ruleData.*` field in the OCSF mapping is undefined.
-* **Splunk: optional.** Leave it disabled for one event per request, with every rule in `attackData.rules[]` (Splunk extracts those as parallel multivalue fields, so correlating the *n*-th rule across them needs `mvzip`/`mvexpand` at search time). Enable it for one event per rule instead - the Splunk `Code` function detects the unrolled `ruleData` and collapses `attackData.rules` to just that rule, so `_raw` keeps the same shape either way and never ships the rule twice.
+#### The shared `JSON Unroll` function
+`JSON Unroll` sits *above* the `Serde` extract, and that position is deliberate. Unlike the similarly named `Unroll` function, [`JSON Unroll`](https://docs.cribl.io/stream/json-unroll-function) processes the JSON object string in the `_raw` field - it parses `_raw` internally, replaces the `attackData.rules` array with this event's single rule under the name `ruleData`, and emits one event per rule. Because it reads `_raw` rather than extracted fields, it **must run before the extract**: below `Serde` it would rewrite `_raw` with nothing left to re-extract it, and the OCSF mapping would see no `ruleData` at all.
 
-Either way, enabling `Unroll` multiplies your event count and therefore your licence volume.
+* **OCSF: required.** Detection Finding treats each matched rule as a separate Finding, and the mapping reads `ruleData.*`, which exists only once the array has been unrolled.
+* **Splunk: optional.** Leave it disabled for one event per request, with every rule in `attackData.rules[]` (Splunk extracts those as parallel multivalue fields, so correlating the *n*-th rule across them needs `mvzip`/`mvexpand` at search time). Enable it for one event per rule instead; the Splunk `Code` function renames whichever of the two shapes it finds.
+
+Either way, enabling it multiplies your event count and therefore your licence volume.
 
 #### Bot-only events and OCSF
 Not every event Akamai returns is a WAF detection. Bot events arrive with `botData` but no `attackData`, so there is no matched rule to map. Sent through the OCSF mapping they would produce a record claiming `class_uid: 2004` while missing `finding_info`, `severity_id` and `is_alert` - all required by [Detection Finding [2004]](https://schema.ocsf.io/1.4.0/classes/detection_finding) - because 20 of the mapping's expressions dereference `ruleData`, `attackData`, `geo` or `userRiskData`, none of which exist on such an event.
@@ -125,7 +127,9 @@ Upgrading certain Cribl Packs using the same Pack ID can have unintended consequ
 
 `cribl_akamai_siem_security_events`:
 * The single `Outputs` group is now two clearly named, mutually exclusive groups - `Output - OCSF (Amazon Security Lake)` and `Output - Splunk (akamaisiem sourcetype)`. Each group's description names the functions you have to enable, so the choice between chaining to OCSF and serializing for Splunk is made in one place. The Route is unchanged - still a single `cribl_akamai_siem_events_route`.
-* `Unroll` now sits above both Output groups rather than belonging to one, and is documented as required for OCSF but optional for Splunk. Enabling it on the Splunk path used to serialize each rule twice: `Unroll` puts the event's single rule at `ruleData` but leaves the whole array in `attackData.rules`. The Splunk `Code` function now collapses `attackData.rules` down to the unrolled rule, so `_raw` keeps the same shape whether `Unroll` is on or off.
+* **Reverted 2.1.0's `Unroll` reordering, which was a mistake.** `JSON Unroll` is back above the `Serde` extract, where the Pack originally had it, and enabled again. [`JSON Unroll`](https://docs.cribl.io/stream/json-unroll-function) operates on the JSON string in `_raw`, not on extracted fields, so 2.1.0's move below the extract left the OCSF mapping with no `ruleData` - the exact failure that change claimed to fix. It is documented as required for OCSF and optional for Splunk.
+* The Splunk `Code` function no longer tries to collapse `attackData.rules` into the unrolled rule. `JSON Unroll` *replaces* the array rather than duplicating it, so there was never a double-ship to prevent; the function now simply renames whichever shape is present.
+* The Pack now ships with the OCSF output enabled (`JSON Unroll` plus the **Output - OCSF** group), and the **Output - Splunk** group disabled at the group level.
 * The OCSF `Chain` function is now filtered on `attackData` instead of `true`. Bot-only events have no matched WAF rule, so 20 of the mapping's expressions dereferenced a `ruleData` / `attackData` / `geo` / `userRiskData` object that did not exist, and the result was a `class_uid: 2004` record with no `finding_info`, `severity_id` or `is_alert` - all required by the OCSF class. Those events now bypass the mapping and pass through as normalized JSON (see *Bot-only events and OCSF*).
 
 Docs:
@@ -141,7 +145,7 @@ Docs:
 * Rule field matching is case-insensitive and coerces non-string values, so a change in Akamai's casing or types no longer throws.
 
 `cribl_akamai_siem_security_events`:
-* The `Unroll` function now runs **after** the `Serde` extract. It previously ran first, before `attackData` existed on the event, so it silently did nothing - which left every `ruleData.*` field undefined in the OCSF output. `Unroll` now ships disabled and must be enabled for the OCSF output (see *Configure Output Format*).
+* Moved the `Unroll` function below the `Serde` extract and shipped it disabled. **This was wrong and is reverted in 2.1.1** - `JSON Unroll` operates on `_raw` and has to run above the extract, which is where the Pack originally had it.
 * Added an optional `Code` function to the Splunk group that renames the rule fields to the Splunk TA names.
 * The Splunk `index` now falls back to `akamai_siem` if the `akamai_siem_default_splunk_index` variable is missing.
 
