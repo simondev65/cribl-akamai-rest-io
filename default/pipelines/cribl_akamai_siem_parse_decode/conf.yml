@@ -32,53 +32,68 @@ functions:
     description: Drop offset context events. This metadata is used for state
       tracking prior to this pipeline.
   - id: code
-    filter: "true"
+    filter: attackData
     disabled: false
     conf:
       maxNumOfIterations: 5000
       activeLogSampleRate: 1
       useUniqueLogChannel: true
-      code: >-
+      code: |-
         function decodeAkamaiConfigRule(attackData) {
 
             let decodedAttackData = {};
-            
+
             for (const [key, value] of Object.entries(attackData)) {
-                if (key.startsWith('rule')) {
-                    decodedAttackData[key] = Array.from(C.Decode.uri(value).split(';'), (x) => C.Decode.base64(x))
+                if (key.match(/^rules?/i)) {
+
+                    // Akamai joins the per-rule values with ';'. A trailing ';' would produce a
+                    // spurious empty member, so strip it. base64 uses [A-Za-z0-9+/=] only, so a
+                    // semicolon is always a separator and never part of a value.
+                    // Leading/interior empties are meaningful placeholders and are preserved,
+                    // because the rule* arrays are positionally aligned with each other.
+                    const decoded = String(C.Decode.uri(value)).replace(/;+$/, '');
+
+                    if (decoded !== '') {
+                        decodedAttackData[key] = Array.from(decoded.split(';'), (x) => C.Decode.base64(x));
+                    }
+
+                    delete attackData[key];
                 }
             }
 
-            return decodedAttackData
+            return decodedAttackData;
         }
-
 
         function mergeAkamaiConfigData(configData) {
             let mergedData = [];
 
             for (const [key, value] of Object.entries(configData)) {
+
+                // Pack-native key names: 'rules' -> 'Rule', 'ruleActions' -> 'ruleAction',
+                // and so on. cribl_akamai_siem_security_events_ocsf reads these exact
+                // names, so do not shorten them here.
+                let formattedKey = key.replace(/s$/i, '');
+                formattedKey = (formattedKey.toLowerCase() === 'rule' ? 'Rule' : formattedKey);
+
                 for (let i = 0; i < value.length; i++) {
-
-                    // let formattedKey = key.replace(/^rule(\w{2,})$/, '$1').replace(/s$/, '');
-                    let formattedKey = key.replace(/s$/, '');
-                    formattedKey = (formattedKey === 'rule' ? 'Rule' : formattedKey);
-
-                    try {
-                        mergedData[i][formattedKey] = value[i]
-                    } catch (e) {
-                        mergedData[i] = {[formattedKey]: value[i]}
+                    if (!mergedData[i]) {
+                        mergedData[i] = {};
+                    }
+                    if (value[i] !== undefined && value[i] !== '') {
+                        mergedData[i][formattedKey] = value[i];
                     }
                 }
             }
 
-            return mergedData
+            // Drop rule slots that carry no values at all, so a trailing or all-empty
+            // member does not surface as an empty object in attackData.rules.
+            return mergedData.filter((rule) => rule && Object.keys(rule).length > 0);
         }
-
 
         __e['attackData']['data'] = mergeAkamaiConfigData(decodeAkamaiConfigRule(__e['attackData']));
     groupId: oQucZ4
   - id: eval
-    filter: "true"
+    filter: httpMessage
     disabled: false
     conf:
       remove:
@@ -89,14 +104,18 @@ functions:
           value: C.Decode.uri(httpMessage.query)
         - disabled: false
           name: httpMessage.requestHeaders
-          value: C.Decode.uri(httpMessage.requestHeaders).split('\n').filter(String)
+          value: C.Decode.uri(httpMessage.requestHeaders).split(/\r?\n/).filter(String)
         - disabled: false
           name: httpMessage.responseHeaders
-          value: C.Decode.uri(httpMessage.responseHeaders).split('\n').filter(String)
+          value: C.Decode.uri(httpMessage.responseHeaders).split(/\r?\n/).filter(String)
+        - disabled: false
+          name: httpMessage.requestId
+          value: C.Decode.uri(httpMessage.requestId)
       keep: []
+      printUndefineds: false
     groupId: oQucZ4
   - id: eval
-    filter: "true"
+    filter: attackData
     disabled: false
     conf:
       add:
@@ -105,6 +124,7 @@ functions:
           value: attackData.data
       remove:
         - attackData.data
+      printUndefineds: false
     groupId: oQucZ4
   - id: numerify
     filter: "true"
@@ -112,7 +132,8 @@ functions:
     conf:
       depth: 5
       format: none
-      ignoreFields: []
+      ignoreFields:
+        - httpMessage.requestId
       filterExpr: ""
       digits: 0
     groupId: oQucZ4
@@ -141,4 +162,7 @@ functions:
         - host
       remove:
         - "*"
-description: Decode encoded data in Akamai security events
+    description: Removes additional fields and keeps _raw as string
+description: Decode encoded data in Akamai security events. Destination-neutral -
+  rule field names are left as-is for cribl_akamai_siem_security_events and its
+  OCSF mapping to consume.

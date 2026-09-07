@@ -45,6 +45,15 @@ After installing the Pack, you must perform the following:
 ### Configure Output Format
 Data can be configured to output in either normalized JSON (default), OCSF, or Splunk (`_raw `+ Splunk fields) format. Enable *only one* format in the `cribl_akamai_siem_security_events` pipeline.
 
+* **Normalized JSON** (default): nothing to enable.
+* **OCSF** (Amazon Security Lake): enable the `Chain` function *and* the `Unroll` function above the Outputs group. OCSF Detection Finding treats each matched WAF rule as a separate Finding, so the rules array must be unrolled into one event per rule. Note that this multiplies your event count.
+* **Splunk**: enable all three functions in the Splunk branch - the `Code` function that renames the rule fields to the names the [Akamai SIEM Integration App](https://splunkbase.splunk.com/app/4310) expects (`Rule`→`id`, `ruleAction`→`action`, `ruleMessage`→`message`, and so on), the `Serialize` function, and the `Eval` function that sets `index`, `source` and `sourcetype`. Leave `Unroll` disabled unless you specifically want one event per rule.
+
+#### Decoded rule fields
+`cribl_akamai_siem_parse_decode` is deliberately **destination-neutral**: it decodes the base64/URI-encoded `attackData.rule*` fields into an array of objects at `attackData.rules[]`, keyed `Rule`, `ruleAction`, `ruleData`, `ruleMessage`, `ruleSelector`, `ruleTag` and `ruleVersion`. Keys with no value for a given rule are omitted rather than emitted as empty strings.
+
+These are the names `cribl_akamai_siem_security_events_ocsf` reads, so do not rename them in the pre-processing pipeline - rename in the output branch instead, the way the Splunk branch does. Anything destination-specific (renaming fields, serializing to `_raw`) belongs in `cribl_akamai_siem_security_events`.
+
 ### Configure your Destination/Update Pack Routes
 To ensure proper data routing, you must make a choice: retain the current setting to use the Default Destination defined by your Worker Group, or define a new Destination directly inside this pack and adjust the pack's route accordingly.
 
@@ -98,6 +107,24 @@ The Pack includes functionality to monitor the data ingestion lag via the `cribl
 Upgrading certain Cribl Packs using the same Pack ID can have unintended consequences. See [Upgrading an Existing Pack](https://docs.cribl.io/stream/packs#upgrading) for details.
 
 ## Release Notes
+
+### Version 2.1.0
+
+`cribl_akamai_siem_parse_decode`:
+* Fixed the `attackData.rule*` decoding. A trailing `;` in an Akamai rule field no longer produces a spurious empty rule; rule slots carrying no values are pruned instead of surfacing as empty objects; and empty per-rule values are omitted instead of being emitted as empty strings, which `Numerify` then turned into `0` (visible as `ruleSelector: 0` in the old decoded sample).
+* Request and response headers are now split on `/\r?\n/`. Akamai encodes the separator as `%0d%0a`, so every header element previously carried a trailing `\r`.
+* `Numerify` now ignores `httpMessage.requestId`. All-digit Akamai request IDs were being coerced to numbers, losing leading zeros and - past 2^53 - precision.
+* The `Code` and `Eval` functions are now scoped with `attackData` / `httpMessage` filters instead of `true`. Events with no `attackData` - bot-only events, or any event whose `_raw` failed to parse in Preview - previously errored with `Cannot set properties of undefined`. They now pass through untouched.
+* Rule field matching is case-insensitive and coerces non-string values, so a change in Akamai's casing or types no longer throws.
+
+`cribl_akamai_siem_security_events`:
+* The `Unroll` function now runs **after** the `Serde` extract. It previously ran first, before `attackData` existed on the event, so it silently did nothing - which left every `ruleData.*` field undefined in the OCSF output. `Unroll` now ships disabled and must be enabled for the OCSF output (see *Configure Output Format*).
+* Added an optional `Code` function to the Splunk branch that renames the rule fields to the Splunk TA names.
+* The Splunk `index` now falls back to `akamai_siem` if the `akamai_siem_default_splunk_index` variable is missing.
+
+Samples:
+* Added `cribl_akamai_security_event_edge_cases` - collector output as the event breaker delivers it, covering a security event with a trailing `;` in `ruleSelectors`, a bot-only event, and an offset state object.
+* Refreshed `cribl_akamai_security_event_decoded` to match the corrected decoding.
 
 ### Version 2.0.0
 * Updated Route Destinations to "Send to Worker Group Routes". See above for details.

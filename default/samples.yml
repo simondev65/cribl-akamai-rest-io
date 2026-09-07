@@ -9,7 +9,18 @@ jxLMbB:
 zr2U6K:
   sampleName: cribl_akamai_security_event_decoded
   created: 1756925368964
-  size: 5498
+  size: 5529
   numEvents: 1
   description: API event with decoded "attackData"
+  ttl: 0
+kT9vRm:
+  sampleName: cribl_akamai_security_event_edge_cases
+  created: 1788768000000
+  size: 2725
+  numEvents: 3
+  description: Collector output as delivered by the event breaker - a security event
+    (its "ruleSelectors" ends in a trailing ";"), a bot-only event with no
+    "attackData", and an offset state object. Use this to test the decode
+    pipeline rather than the pretty-printed example on Akamai's docs page, which
+    has a trailing comma and is invalid JSON.
   ttl: 0

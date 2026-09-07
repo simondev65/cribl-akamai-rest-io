@@ -23,14 +23,9 @@ functions:
     filter: "true"
     disabled: null
     conf:
-      comment: Unroll each rule array member since they each represent a separate
-        Finding with different values for many Detection Finding fields
-  - id: json_unroll
-    filter: "true"
-    disabled: null
-    conf:
-      path: attackData.rules
-      name: ruleData
+      comment: Re-extract the fields from _raw. Required - cribl_akamai_siem_parse_decode
+        keeps _raw only, so every function below (including Unroll) needs this to
+        run first.
   - id: serde
     filter: "true"
     disabled: null
@@ -40,9 +35,24 @@ functions:
       srcField: _raw
   - id: comment
     filter: "true"
+    disabled: null
+    conf:
+      comment: Enable to emit one event per matched WAF rule instead of one per request.
+        Required for the OCSF output, since each rule is a separate Detection
+        Finding. Leave disabled for the default JSON and Splunk outputs - it
+        multiplies your event count, and therefore your licence volume.
+  - id: json_unroll
+    filter: "true"
+    disabled: true
+    conf:
+      path: attackData.rules
+      name: ruleData
+  - id: comment
+    filter: "true"
     disabled: false
     conf:
-      comment: Enable to output OCSF (Amazon Security Lake)
+      comment: Enable to output OCSF (Amazon Security Lake) - also enable the Unroll
+        function above
     groupId: bpRRTi
   - id: chain
     filter: "true"
@@ -54,8 +64,44 @@ functions:
     filter: "true"
     disabled: false
     conf:
-      comment: Enable to output to Splunk
+      comment: Enable to output to Splunk - enable all three functions below
     groupId: bpRRTi
+  - id: code
+    filter: attackData
+    disabled: true
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1
+      useUniqueLogChannel: true
+      code: |-
+        // Rename the decoded rule keys to the names used by the Splunk Akamai SIEM
+        // Integration TA. This is a destination concern, so it belongs to the Splunk
+        // branch only: cribl_akamai_siem_security_events_ocsf reads the pack-native
+        // names (Rule, ruleAction, ruleMessage, ...) and must not see these.
+        const KEY_MAP = {
+            'rule': 'id',
+            'ruleaction': 'action',
+            'ruledata': 'data',
+            'rulemessage': 'message',
+            'ruleselector': 'selector',
+            'ruletag': 'tag',
+            'ruleversion': 'version'
+        };
+
+        const rules = __e['attackData'] && __e['attackData']['rules'];
+
+        if (Array.isArray(rules)) {
+            __e['attackData']['rules'] = rules.map((rule) => {
+                const renamed = {};
+                for (const [key, value] of Object.entries(rule)) {
+                    const mapped = KEY_MAP[key.toLowerCase()];
+                    renamed[mapped || (key.charAt(0).toLowerCase() + key.slice(1))] = value;
+                }
+                return renamed;
+            });
+        }
+    groupId: bpRRTi
+    description: Rename rule fields to the Splunk TA names
   - id: serialize
     filter: "true"
     disabled: true
@@ -85,12 +131,14 @@ functions:
       add:
         - disabled: false
           name: index
-          value: "index ? index : C.vars.akamai_siem_default_splunk_index"
+          value: "index ? index : (C.vars.akamai_siem_default_splunk_index ||
+            'akamai_siem')"
         - disabled: false
           name: sourcetype
           value: "'akamaisiem'"
         - disabled: false
           name: source
           value: "source ? source : 'cribl-akamai-security-events-rest'"
+      printUndefineds: false
     groupId: bpRRTi
 description: Process and output Akamai security events
