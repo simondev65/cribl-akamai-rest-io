@@ -2,9 +2,16 @@ output: default
 streamtags: []
 groups:
   bpRRTi:
-    description: Select the desired output
-    name: Outputs
-    index: 5
+    name: Output - OCSF (Amazon Security Lake)
+    description: Choose this group OR the Splunk group below - never both. To use it,
+      enable its Chain function, plus the shared Unroll function above the group.
+    index: 6
+    disabled: false
+  sQ3vLm:
+    name: Output - Splunk (akamaisiem sourcetype)
+    description: "Choose this group OR the OCSF group above - never both. To use it,
+      enable all three of its functions: Code, Serialize, Eval."
+    index: 8
     disabled: false
 asyncFuncTimeout: 1000
 functions:
@@ -12,8 +19,10 @@ functions:
     filter: "true"
     disabled: null
     conf:
-      comment: Parse and decode fields from Akamai SIEM Security Events and output to
-        either OCSF or Splunk
+      comment: Post-processing pipeline for Akamai SIEM Security Events. Output is
+        normalized JSON by default. To send somewhere else, enable exactly one of
+        the two Output groups below - chain to OCSF, or serialize for Splunk.
+        Enabling both is not a supported combination.
   - id: comment
     filter: "true"
     disabled: null
@@ -37,35 +46,52 @@ functions:
     filter: "true"
     disabled: null
     conf:
-      comment: Enable to emit one event per matched WAF rule instead of one per request.
-        Required for the OCSF output, since each rule is a separate Detection
-        Finding. Leave disabled for the default JSON and Splunk outputs - it
-        multiplies your event count, and therefore your licence volume.
+      comment: Unroll is shared by both Output groups below - it emits one event per
+        matched WAF rule instead of one per request. REQUIRED for OCSF, where each
+        rule is its own Detection Finding. OPTIONAL for Splunk - enable it if you
+        want one Splunk event per rule (the Code function in the Splunk group then
+        collapses attackData.rules to just that rule), or leave it disabled to keep
+        one event per request with every rule in attackData.rules[]. Either way,
+        enabling it multiplies your event count and therefore your licence volume.
   - id: json_unroll
     filter: "true"
     disabled: true
     conf:
       path: attackData.rules
       name: ruleData
+    description: Emit one event per matched WAF rule (required for OCSF, optional for
+      Splunk)
   - id: comment
     filter: "true"
     disabled: false
     conf:
-      comment: Enable to output OCSF (Amazon Security Lake) - also enable the Unroll
-        function above
+      comment: OCSF output - enable the Chain function below AND the shared Unroll
+        function above. Chain hands the unrolled events to
+        cribl_akamai_siem_security_events_ocsf, which reads the pack-native rule
+        names (Rule, ruleAction, ruleMessage, ...) - so do not enable the Splunk
+        group's Code function, which renames them. Chain is filtered on attackData
+        because events with no matched WAF rule (bot-only events) are not
+        detections, and the mapping would build a Detection Finding missing every
+        required field from finding_info to severity_id. They skip the mapping and
+        pass through as normalized JSON. Add a Drop above if you prefer to discard
+        them.
     groupId: bpRRTi
   - id: chain
-    filter: "true"
+    filter: attackData
     disabled: true
     conf:
       processor: cribl_akamai_siem_security_events_ocsf
     groupId: bpRRTi
+    description: Map security events to the OCSF Detection Finding [2004] Class
   - id: comment
     filter: "true"
     disabled: false
     conf:
-      comment: Enable to output to Splunk - enable all three functions below
-    groupId: bpRRTi
+      comment: Splunk output - enable ALL THREE functions in this group, Code then
+        Serialize then Eval. Produces _raw plus the index, source and sourcetype the
+        Akamai SIEM Integration App expects. The shared Unroll above is optional
+        here - see its comment. Leave the OCSF group above disabled.
+    groupId: sQ3vLm
   - id: code
     filter: attackData
     disabled: true
@@ -76,7 +102,7 @@ functions:
       code: |-
         // Rename the decoded rule keys to the names used by the Splunk Akamai SIEM
         // Integration TA. This is a destination concern, so it belongs to the Splunk
-        // branch only: cribl_akamai_siem_security_events_ocsf reads the pack-native
+        // group only: cribl_akamai_siem_security_events_ocsf reads the pack-native
         // names (Rule, ruleAction, ruleMessage, ...) and must not see these.
         const KEY_MAP = {
             'rule': 'id',
@@ -88,19 +114,26 @@ functions:
             'ruleversion': 'version'
         };
 
-        const rules = __e['attackData'] && __e['attackData']['rules'];
-
-        if (Array.isArray(rules)) {
-            __e['attackData']['rules'] = rules.map((rule) => {
-                const renamed = {};
-                for (const [key, value] of Object.entries(rule)) {
-                    const mapped = KEY_MAP[key.toLowerCase()];
-                    renamed[mapped || (key.charAt(0).toLowerCase() + key.slice(1))] = value;
-                }
-                return renamed;
-            });
+        function renameRule(rule) {
+            const renamed = {};
+            for (const [key, value] of Object.entries(rule)) {
+                const mapped = KEY_MAP[key.toLowerCase()];
+                renamed[mapped || (key.charAt(0).toLowerCase() + key.slice(1))] = value;
+            }
+            return renamed;
         }
-    groupId: bpRRTi
+
+        // When the shared Unroll above is enabled, this event's single rule sits at
+        // 'ruleData' while attackData.rules still holds the whole array - serializing
+        // both would ship the rule twice. Collapse to the unrolled rule so Splunk sees
+        // one shape either way: attackData.rules[] holds the rule(s) for this event.
+        if (__e['ruleData']) {
+            __e['attackData']['rules'] = [renameRule(__e['ruleData'])];
+            delete __e['ruleData'];
+        } else if (Array.isArray(__e['attackData']['rules'])) {
+            __e['attackData']['rules'] = __e['attackData']['rules'].map(renameRule);
+        }
+    groupId: sQ3vLm
     description: Rename rule fields to the Splunk TA names
   - id: serialize
     filter: "true"
@@ -114,7 +147,7 @@ functions:
         - "!host"
         - "!source"
         - "*"
-    groupId: bpRRTi
+    groupId: sQ3vLm
   - id: eval
     filter: "true"
     disabled: true
@@ -140,5 +173,7 @@ functions:
           name: source
           value: "source ? source : 'cribl-akamai-security-events-rest'"
       printUndefineds: false
-    groupId: bpRRTi
-description: Process and output Akamai security events
+    groupId: sQ3vLm
+    description: Set the Splunk index, source and sourcetype
+description: Process Akamai security events and output normalized JSON (default),
+  OCSF, or Splunk - enable exactly one Output group
